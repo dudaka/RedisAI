@@ -26,6 +26,8 @@
  */
 void *RedisAI_DagRunSession(RedisAI_RunInfo *rinfo);
 
+void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char* devicestr, int *progress);
+
 /**
  * Reply Callback called after a successful RedisModule_UnblockClient() within
  * RedisAI_DagRunSession() in order to reply to the client and unblock it

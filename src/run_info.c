@@ -74,7 +74,9 @@ int RAI_InitDagOp(RAI_DagOp **result) {
   }
   dagOp->mctx = NULL;
   dagOp->sctx = NULL;
+  dagOp->devicestr = NULL;
   dagOp->duration_us = 0;
+  dagOp->result = -1;
   RAI_InitError(&dagOp->err);
   if (!(dagOp->err)) {
     return REDISMODULE_ERR;
@@ -129,6 +131,36 @@ int RAI_InitRunInfo(RedisAI_RunInfo **result) {
   }
   rinfo->dagReplyLength = 0;
   rinfo->dagNumberCommands = 0;
+  rinfo->dagMaster = 1;
+  pthread_mutex_init(&rinfo->dagMutex, NULL);
+  *result = rinfo;
+  return REDISMODULE_OK;
+}
+
+int RAI_ShallowCopyDagRunInfo(RedisAI_RunInfo **result, RedisAI_RunInfo *src) {
+  RedisAI_RunInfo *rinfo;
+  rinfo = (RedisAI_RunInfo *)RedisModule_Calloc(1, sizeof(RedisAI_RunInfo));
+  if (!rinfo) {
+    return REDISMODULE_ERR;
+  }
+  rinfo->runkey = NULL;
+  rinfo->outkeys = (RedisModuleString **)array_new(RedisModuleString *, 1);
+  rinfo->mctx = NULL;
+  rinfo->sctx = NULL;
+  rinfo->duration_us = 0;
+  RAI_InitError(&rinfo->err);
+  if (!(rinfo->err)) {
+    return REDISMODULE_ERR;
+  }
+  rinfo->use_local_context = src->use_local_context;
+  rinfo->dagTensorsContext = src->dagTensorsContext;
+  rinfo->dagTensorsLoadedContext = src->dagTensorsLoadedContext;
+  rinfo->dagTensorsPersistentContext = src->dagTensorsPersistentContext;
+  rinfo->dagOps = src->dagOps;
+  rinfo->dagReplyLength = src->dagReplyLength;
+  rinfo->dagNumberCommands = src->dagNumberCommands;
+  rinfo->dagMutex = src->dagMutex;
+  rinfo->dagMaster = 0;
   *result = rinfo;
   return REDISMODULE_OK;
 }
@@ -172,6 +204,15 @@ void RAI_FreeRunInfo(RedisModuleCtx *ctx, struct RedisAI_RunInfo *rinfo) {
     RAI_ScriptRunCtxFree(rinfo->sctx, true);
   }
   RAI_FreeError(rinfo->err);
+
+  if (rinfo->use_local_context) {
+    pthread_mutex_destroy(&rinfo->dagMutex);
+
+    if (rinfo->dagMaster == 0) {
+      RedisModule_Free(rinfo);
+      return;
+    }
+  }
 
   if (rinfo->dagTensorsContext) {
     AI_dictIterator *iter = AI_dictGetSafeIterator(rinfo->dagTensorsContext);
@@ -223,6 +264,7 @@ void RAI_FreeRunInfo(RedisModuleCtx *ctx, struct RedisAI_RunInfo *rinfo) {
     }
     array_free(rinfo->outkeys);
   }
+
   RedisModule_Free(rinfo);
 }
 

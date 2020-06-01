@@ -38,6 +38,7 @@ typedef struct RAI_DagOp {
   RAI_Tensor **outTensors;
   RAI_ModelRunCtx *mctx;
   RAI_ScriptRunCtx *sctx;
+  char* devicestr;
   int result;  // REDISMODULE_OK or REDISMODULE_ERR
   long long duration_us;
   RAI_Error *err;
@@ -86,6 +87,9 @@ typedef struct RedisAI_RunInfo {
   RAI_DagOp **dagOps;
   int dagReplyLength;
   int dagNumberCommands;
+  int dagComplete;
+  pthread_mutex_t dagMutex;
+  int dagMaster;
 } RedisAI_RunInfo;
 
 /**
@@ -96,6 +100,8 @@ typedef struct RedisAI_RunInfo {
  */
 int RAI_InitRunInfo(RedisAI_RunInfo **result);
 
+int RAI_ShallowCopyDagRunInfo(RedisAI_RunInfo **result, RedisAI_RunInfo *src);
+ 
 /**
  * Frees the memory allocated on RedisAI_RunInfo
  * @param ctx Context in which Redis modules operate
