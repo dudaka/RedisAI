@@ -163,7 +163,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
 
   // TODO DAG
   // acquire mutex
-  // this is not strictly needed for acccess, but we may have contention
+  // this is not strictly needed for access, but we may have contention
   // if threads per queue are greater than one
   // To simplify things we may well do everything under a mutex
   bool all_complete = true;
@@ -174,13 +174,17 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       continue;
     }
 
+    if (strcasecmp(devicestr, rinfo->dagOps[i]->devicestr) != 0) {
+      continue;
+    }
+
     // if (rinfo->dagOps[i]->)
 
     if (rinfo->dagOps[i]->result == -1) {
       all_complete = false;
 
       // TODO DAG
-      // 1. check that the op is compatibile with the current device
+      // 1. check that the op is compatibile with the current device [DONE]
       // 2. check that all results are realized
       //////////////// PROBLEM: we don't know which ones because they
       ////////////////          haven't been parsed yet :-(
@@ -189,7 +193,14 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       ////////////////          So basically we need to copy the keys
       ////////////////          of the local scope, so that we can
       ////////////////          check if they are there
+      // SOLUTION: we can get the currentOp and execute parsing (see
+      // below). If parsing is ok (aka localContext contains all inputs)
+      // then we execute, otherwise we don't proceed
+      // We only have to make sure we exit the parser managing memory
+      // correctly (ie not leaking)
       currentOp = rinfo->dagOps[i];
+      
+      printf("DAGOP DEVICE %s\n", currentOp->devicestr);
 
       // TODO DAG
       // in theory we could get to the end while other devices
@@ -241,6 +252,12 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   //   return NULL;
   // }
 
+
+  // TODO DAG
+  // we must make sure we are not creating race conditions on currrentOp; 
+  // the only variable we access above is `result`. We need to acquire
+  // a lock in order to set result (FIXME)
+
   switch (currentOp->commandType) {
     case REDISAI_DAG_CMD_TENSORSET: {
       RAI_Tensor *t = NULL;
@@ -250,6 +267,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
         const char *key_string =
             RedisModule_StringPtrLen(currentOp->argv[1], NULL);
         const char *dictKey = RedisModule_Strdup(key_string);
+        printf("DICT KEY TENSORSET %s\n", dictKey);
         // TODO DAG
         // acquire mutex
         AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, t);
@@ -302,6 +320,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
             const char *dictKey = RedisModule_Strdup(key_string);
             // TODO DAG
             // acquire mutex
+            printf("DICT KEY MODELRUN %s\n", dictKey);
             AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
           } else {
             RAI_SetError(currentOp->err, RAI_EMODELRUN,
@@ -336,6 +355,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
             const char *dictKey = RedisModule_Strdup(key_string);
             // TODO DAG
             // acquire mutex
+            printf("DICT KEY SCRIPTRUN %s\n", dictKey);
             AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
           } else {
             RAI_SetError(currentOp->err, RAI_EMODELRUN,

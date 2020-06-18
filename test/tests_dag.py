@@ -179,6 +179,7 @@ def test_dagrun_ro_modelrun_scriptrun_resnet(env):
         # tf model has 100 classes [0,999]
         env.assertEqual(ret[4][0]>=0 and ret[4][0]<1001, True)
 
+
 def test_dagrun_modelrun_scriptrun_resnet(env):
     if (not TEST_TF or not TEST_PT):
         return
@@ -224,6 +225,7 @@ def test_dagrun_modelrun_scriptrun_resnet(env):
         ret = con.execute_command('AI.TENSORGET', class_key, 'VALUES' )
         # tf model has 100 classes [0,999]
         env.assertEqual(ret[0]>=0 and ret[0]<1001, True)
+
 
 def test_dag_scriptrun_errors(env):
     if (not TEST_TF or not TEST_PT):
@@ -727,3 +729,72 @@ def test_dagro_modelrun_financialNet_no_writes_multiple_modelruns(env):
     env.assertEqual(0, financialNetRunInfo['samples'])
     env.assertEqual(0, financialNetRunInfo['calls'])
     env.assertEqual(0, financialNetRunInfo['errors'])
+
+
+def test_dagrun_modelrun_multidevice_resnet(env):
+    if (not TEST_TF or not TEST_PT):
+        return
+    con = env.getConnection()
+    model_name_0 = 'imagenet_model'
+    model_name_1 = 'imagenet_model'
+    script_name = 'imagenet_script'
+    inputvar = 'images'
+    outputvar = 'output'
+    model_pb, script, labels, img = load_resnet_test_data()
+
+    device_0 = DEVICE + ':0'
+    device_1 = DEVICE + ':1'
+    # device_0 = DEVICE
+    # device_1 = DEVICE
+
+    ret = con.execute_command('AI.MODELSET', model_name_0, 'TF', device_0,
+                              'INPUTS', inputvar,
+                              'OUTPUTS', outputvar,
+                              'BLOB', model_pb)
+    env.assertEqual(ret, b'OK')
+
+    ret = con.execute_command('AI.MODELSET', model_name_1, 'TF', device_1,
+                              'INPUTS', inputvar,
+                              'OUTPUTS', outputvar,
+                              'BLOB', model_pb)
+    env.assertEqual(ret, b'OK')
+
+    # ret = con.execute_command('AI.SCRIPTSET', script_name, DEVICE, 'SOURCE', script)
+    ret = con.execute_command('AI.SCRIPTSET', script_name, device_0, 'SOURCE', script)
+    env.assertEqual(ret, b'OK')
+ 
+    image_key = 'image'
+    temp_key1 = 'temp_key1'
+    temp_key2_0 = 'temp_key2_0'
+    temp_key2_1 = 'temp_key2_1'
+    class_key_0 = 'output0'
+    class_key_1 = 'output1'
+
+    ret = con.execute_command(
+        'AI.DAGRUN',
+                    # 'PERSIST', '2', class_key_0, class_key_1, '|>',
+        'AI.TENSORSET', image_key, 'UINT8', img.shape[1], img.shape[0], 3, 'BLOB', img.tobytes(), '|>',
+        'AI.SCRIPTRUN',  script_name, 'pre_process_3ch',
+                     'INPUTS', image_key,
+                     'OUTPUTS', temp_key1,    '|>',
+        'AI.MODELRUN', model_name_0,
+                     'INPUTS', temp_key1,
+                     'OUTPUTS', temp_key2_0,  '|>',
+        'AI.MODELRUN', model_name_1,
+                     'INPUTS', temp_key1,
+                     'OUTPUTS', temp_key2_1,  '|>',
+        'AI.SCRIPTRUN', script_name, 'post_process',
+                      'INPUTS', temp_key2_0,
+                      'OUTPUTS', class_key_0, '|>',
+        'AI.SCRIPTRUN', script_name, 'post_process',
+                      'INPUTS', temp_key2_1,
+                      'OUTPUTS', class_key_1
+    )
+    env.assertEqual([b'OK', b'OK', b'OK', b'OK', b'OK', b'OK'],ret)
+
+    ret = con.execute_command('AI.TENSORGET', class_key_0, 'VALUES' )
+    # tf model has 100 classes [0,999]
+    env.assertEqual(ret[0]>=0 and ret[0]<1001, True)
+
+    ret = con.execute_command('AI.TENSORGET', class_key_1, 'VALUES' )
+    env.assertEqual(ret[0]>=0 and ret[0]<1001, True)

@@ -94,6 +94,7 @@ int ensureRunQueue(const char *devicestr, RunQueueInfo **run_queue_info) {
     AI_dictAdd(run_queues, (void *)devicestr_, (void *)*run_queue_info);
     result = REDISMODULE_OK;
   }
+  printf("ENSURING QUEUE %s\n", devicestr_);
 
   RedisModule_Free(devicestr_);
 
@@ -101,7 +102,6 @@ int ensureRunQueue(const char *devicestr, RunQueueInfo **run_queue_info) {
 }
 
 void *RedisAI_Run_ThreadMain(void *arg) {
-    printf("C\n");
   RunQueueInfo *run_queue_info = (RunQueueInfo *)arg;
   pthread_t self = pthread_self();
   RAI_PTHREAD_SETNAME("redisai_bthread");
@@ -110,7 +110,8 @@ void *RedisAI_Run_ThreadMain(void *arg) {
     int rc = pthread_cond_wait(&run_queue_info->queue_condition_var,
                                &run_queue_info->run_queue_mutex);
 
-    printf("C\n");
+    printf("WORKER %s\n", run_queue_info->devicestr);
+
     long long run_queue_len = queueLength(run_queue_info->run_queue);
 
     while (run_queue_len > 0) {
