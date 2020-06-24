@@ -106,38 +106,37 @@ void *RedisAI_DagRunSession(RedisAI_RunInfo *rinfo) {
         }
         break;
       }
-        case REDISAI_DAG_CMD_SCRIPTRUN: {
-            const int parse_result = RedisAI_Parse_ScriptRun_RedisCommand(
-                    NULL, currentOp->argv, currentOp->argc, &(currentOp->sctx),
-                    &(currentOp->outkeys), &(currentOp->sctx->script), 1,
-                    &(rinfo->dagTensorsContext), 0, NULL, currentOp->err);
+      case REDISAI_DAG_CMD_SCRIPTRUN: {
+        const int parse_result = RedisAI_Parse_ScriptRun_RedisCommand(
+                NULL, currentOp->argv, currentOp->argc, &(currentOp->sctx),
+                &(currentOp->outkeys), &(currentOp->sctx->script), 1,
+                &(rinfo->dagTensorsContext), 0, NULL, currentOp->err);
 
-            if (parse_result > 0) {
-                currentOp->result = REDISMODULE_OK;
-                const long long start = ustime();
-                currentOp->result = RAI_ScriptRun(currentOp->sctx, currentOp->err);
-                currentOp->duration_us = ustime() - start;
-                const size_t noutputs = RAI_ScriptRunCtxNumOutputs(currentOp->sctx);
-                for (size_t outputNumber = 0; outputNumber < noutputs;
-                     outputNumber++) {
-                    RAI_Tensor *tensor =
-                            RAI_ScriptRunCtxOutputTensor(currentOp->sctx, outputNumber);
-                    if (tensor) {
-                        const char *key_string = RedisModule_StringPtrLen(
-                                currentOp->outkeys[outputNumber], NULL);
-                        const char *dictKey = RedisModule_Strdup(key_string);
-                        AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
-                    } else {
-                        RAI_SetError(currentOp->err, RAI_EMODELRUN,
-                                     "ERR output tensor on DAG's SCRIPTRUN was null");
-                        currentOp->result = REDISMODULE_ERR;
-                    }
-                }
+        if (parse_result > 0) {
+          currentOp->result = REDISMODULE_OK;
+          const long long start = ustime();
+          currentOp->result = RAI_ScriptRun(currentOp->sctx, currentOp->err);
+          currentOp->duration_us = ustime() - start;
+          const size_t noutputs = RAI_ScriptRunCtxNumOutputs(currentOp->sctx);
+          for (size_t outputNumber = 0; outputNumber < noutputs;
+             outputNumber++) {
+            RAI_Tensor *tensor = RAI_ScriptRunCtxOutputTensor(currentOp->sctx, outputNumber);
+            if (tensor) {
+              const char *key_string = RedisModule_StringPtrLen(
+                      currentOp->outkeys[outputNumber], NULL);
+              const char *dictKey = RedisModule_Strdup(key_string);
+              AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
             } else {
-                currentOp->result = REDISMODULE_ERR;
+              RAI_SetError(currentOp->err, RAI_EMODELRUN,
+                           "ERR output tensor on DAG's SCRIPTRUN was null");
+              currentOp->result = REDISMODULE_ERR;
             }
-            break;
+          }
+        } else {
+          currentOp->result = REDISMODULE_ERR;
         }
+        break;
+      }
       default: {
         /* unsupported DAG's command */
         RAI_SetError(currentOp->err, RAI_EDAGRUN,
@@ -156,10 +155,14 @@ void *RedisAI_DagRunSession(RedisAI_RunInfo *rinfo) {
 void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, int *progress) {
   RAI_DagOp *currentOp = NULL;
 
+  pthread_mutex_lock(&rinfo->dagMutex);
+  int isDagMaster = rinfo->dagMaster;
   if (rinfo->dagComplete) {
+    pthread_mutex_unlock(&rinfo->dagMutex);
     *progress = 0;
     return NULL;
   }
+  pthread_mutex_unlock(&rinfo->dagMutex);
 
   // TODO DAG
   // acquire mutex
@@ -200,8 +203,6 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       // correctly (ie not leaking)
       currentOp = rinfo->dagOps[i];
       
-      printf("DAGOP DEVICE %s\n", currentOp->devicestr);
-
       // TODO DAG
       // in theory we could get to the end while other devices
       // are running other prior computations
@@ -222,7 +223,8 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   // If results are unrealized so that computation cannot proceed, 
   // then return making sure progress is set to 0
 
-  if (currentOp == NULL && all_complete == 0) {
+  // if (currentOp == NULL && all_complete == 0) {
+  if (currentOp == NULL) {
     *progress = 0;
     return NULL;
   }
@@ -231,13 +233,16 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   // Decide whether to keep this here (it requires one extra round)
   // or keep it here just to be safe
 
+  pthread_mutex_lock(&rinfo->dagMutex);
   if (currentOp == NULL && all_complete == 1 &&
-      rinfo->dagMaster && rinfo->client != NULL) {
+      isDagMaster && rinfo->client != NULL) {
     *progress = 0;
     rinfo->dagComplete = 1;
+    pthread_mutex_unlock(&rinfo->dagMutex);
     RedisModule_UnblockClient(rinfo->client, rinfo);
     return NULL;
   }
+  pthread_mutex_unlock(&rinfo->dagMutex);
 
   // If all complete (ie currentOp == NULL) and all results are realized
   // then unblock.
@@ -258,7 +263,16 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   // the only variable we access above is `result`. We need to acquire
   // a lock in order to set result (FIXME)
 
-  switch (currentOp->commandType) {
+  pthread_mutex_lock(&rinfo->dagMutex);
+
+  int commandType = currentOp->commandType;
+
+  pthread_mutex_unlock(&rinfo->dagMutex);
+
+  printf("COMMAND TYPE %d\n", commandType);
+
+  // switch (currentOp->commandType) {
+  switch (commandType) {
     case REDISAI_DAG_CMD_TENSORSET: {
       RAI_Tensor *t = NULL;
       const int parse_result = RAI_parseTensorSetArgs(
@@ -267,10 +281,11 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
         const char *key_string =
             RedisModule_StringPtrLen(currentOp->argv[1], NULL);
         const char *dictKey = RedisModule_Strdup(key_string);
-        printf("DICT KEY TENSORSET %s\n", dictKey);
         // TODO DAG
         // acquire mutex
+        pthread_mutex_lock(&rinfo->dagMutex);
         AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, t);
+        pthread_mutex_unlock(&rinfo->dagMutex);
         currentOp->result = REDISMODULE_OK;
       } else {
         currentOp->result = REDISMODULE_ERR;
@@ -283,8 +298,10 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       RAI_Tensor *t = NULL;
       // TODO DAG
       // acquire mutex
+      pthread_mutex_lock(&rinfo->dagMutex);
       currentOp->result = RAI_getTensorFromLocalContext(
           NULL, rinfo->dagTensorsContext, key_string, &t, currentOp->err);
+      pthread_mutex_unlock(&rinfo->dagMutex);
       if (currentOp->result == REDISMODULE_OK) {
         RAI_Tensor *outTensor = NULL;
         // TODO: check tensor copy return value
@@ -297,10 +314,12 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
     case REDISAI_DAG_CMD_MODELRUN: {
       // TODO DAG
       // acquire mutex
+      pthread_mutex_lock(&rinfo->dagMutex);
       const int parse_result = RedisAI_Parse_ModelRun_RedisCommand(
           NULL, currentOp->argv, currentOp->argc, &(currentOp->mctx),
           &(currentOp->outkeys), &(currentOp->mctx->model), 1,
           &(rinfo->dagTensorsContext), 0, NULL, currentOp->err);
+      pthread_mutex_unlock(&rinfo->dagMutex);
 
       if (parse_result > 0) {
         RAI_ModelRunCtx *mctxs[1];
@@ -320,8 +339,9 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
             const char *dictKey = RedisModule_Strdup(key_string);
             // TODO DAG
             // acquire mutex
-            printf("DICT KEY MODELRUN %s\n", dictKey);
+            pthread_mutex_lock(&rinfo->dagMutex);
             AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
+            pthread_mutex_unlock(&rinfo->dagMutex);
           } else {
             RAI_SetError(currentOp->err, RAI_EMODELRUN,
                          "ERR output tensor on DAG's MODELRUN was null");
@@ -334,10 +354,12 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       break;
     }
     case REDISAI_DAG_CMD_SCRIPTRUN: {
+      pthread_mutex_lock(&rinfo->dagMutex);
       const int parse_result = RedisAI_Parse_ScriptRun_RedisCommand(
               NULL, currentOp->argv, currentOp->argc, &(currentOp->sctx),
               &(currentOp->outkeys), &(currentOp->sctx->script), 1,
               &(rinfo->dagTensorsContext), 0, NULL, currentOp->err);
+      pthread_mutex_unlock(&rinfo->dagMutex);
 
       if (parse_result > 0) {
         currentOp->result = REDISMODULE_OK;
@@ -355,8 +377,9 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
             const char *dictKey = RedisModule_Strdup(key_string);
             // TODO DAG
             // acquire mutex
-            printf("DICT KEY SCRIPTRUN %s\n", dictKey);
+            pthread_mutex_lock(&rinfo->dagMutex);
             AI_dictReplace(rinfo->dagTensorsContext, (void*)dictKey, tensor);
+            pthread_mutex_unlock(&rinfo->dagMutex);
           } else {
             RAI_SetError(currentOp->err, RAI_EMODELRUN,
                          "ERR output tensor on DAG's SCRIPTRUN was null");
@@ -380,14 +403,28 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   if (currentOp->result == REDISMODULE_OK) {
     *progress = 1;
   }
+  else {
+    pthread_mutex_lock(&rinfo->dagMutex);
+    *rinfo->dagError = 1;
+    if (isDagMaster && rinfo->client != NULL) {
+      RedisModule_UnblockClient(rinfo->client, rinfo);
+    }
+    pthread_mutex_unlock(&rinfo->dagMutex);
+    return NULL;
+  }
 
+  pthread_mutex_lock(&rinfo->dagMutex);
   if (last_op) {
     rinfo->dagComplete = 1;
   }
+  RedisModuleBlockedClient* client = rinfo->client;
+  pthread_mutex_unlock(&rinfo->dagMutex);
 
-  if (last_op && rinfo->dagMaster && rinfo->client != NULL) {
-    RedisModule_UnblockClient(rinfo->client, rinfo);
+  pthread_mutex_lock(&rinfo->dagMutex);
+  if (last_op && isDagMaster && client != NULL) {
+    RedisModule_UnblockClient(client, rinfo);
   }
+  pthread_mutex_unlock(&rinfo->dagMutex);
 
   return NULL;
 }
@@ -397,6 +434,23 @@ int RedisAI_DagRun_Reply(RedisModuleCtx *ctx, RedisModuleString **argv,
   REDISMODULE_NOT_USED(argv);
   REDISMODULE_NOT_USED(argc);
   RedisAI_RunInfo *rinfo = RedisModule_GetBlockedClientPrivateData(ctx);
+
+  int dag_error = 0;
+  char *detail_oneline;
+
+  for (size_t i = 0; i < array_len(rinfo->dagOps); i++) {
+    RAI_DagOp *currentOp = rinfo->dagOps[i];
+    if (currentOp->result == REDISMODULE_ERR) {
+      dag_error = 1;
+      detail_oneline = currentOp->err->detail_oneline;
+    }
+  }
+ 
+  if (dag_error) {
+    // return RedisModule_ReplyWithError(ctx, "ERR Error from DAG");
+    return RedisModule_ReplyWithError(ctx, detail_oneline);
+  }
+
   RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_ARRAY_LEN);
   for (size_t i = 0; i < array_len(rinfo->dagOps); i++) {
     RAI_DagOp *currentOp = rinfo->dagOps[i];
@@ -405,6 +459,7 @@ int RedisAI_DagRun_Reply(RedisModuleCtx *ctx, RedisModuleString **argv,
         rinfo->dagReplyLength++;
         if (currentOp->result == REDISMODULE_ERR) {
           RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
+          dag_error = 1;
         } else {
           RedisModule_ReplyWithSimpleString(ctx, "OK");
         }
@@ -415,6 +470,7 @@ int RedisAI_DagRun_Reply(RedisModuleCtx *ctx, RedisModuleString **argv,
         rinfo->dagReplyLength++;
         if (currentOp->result == REDISMODULE_ERR) {
           RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
+          dag_error = 1;
         } else {
           if (array_len(currentOp->outTensors) > 0) {
             RAI_Tensor *tensor = currentOp->outTensors[0];
@@ -437,6 +493,7 @@ int RedisAI_DagRun_Reply(RedisModuleCtx *ctx, RedisModuleString **argv,
         if (currentOp->result == REDISMODULE_ERR) {
           RAI_SafeAddDataPoint(rstats,0,1,1,0);
           RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
+          dag_error = 1;
         } else {
           RAI_SafeAddDataPoint(rstats,currentOp->duration_us,1,0,0);
           RedisModule_ReplyWithSimpleString(ctx, "OK");
@@ -445,19 +502,19 @@ int RedisAI_DagRun_Reply(RedisModuleCtx *ctx, RedisModuleString **argv,
       }
 
         case REDISAI_DAG_CMD_SCRIPTRUN: {
-            rinfo->dagReplyLength++;
-            struct RedisAI_RunStats *rstats = NULL;
-            const char *runkey =
-                    RedisModule_StringPtrLen(currentOp->runkey, NULL);
-            RAI_GetRunStats(runkey,&rstats);
-            if (currentOp->result == REDISMODULE_ERR) {
-                RAI_SafeAddDataPoint(rstats,0,1,1,0);
-                RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
-            } else {
-                RAI_SafeAddDataPoint(rstats,currentOp->duration_us,1,0,0);
-                RedisModule_ReplyWithSimpleString(ctx, "OK");
-            }
-            break;
+          rinfo->dagReplyLength++;
+          struct RedisAI_RunStats *rstats = NULL;
+          const char *runkey = RedisModule_StringPtrLen(currentOp->runkey, NULL);
+          RAI_GetRunStats(runkey,&rstats);
+          if (currentOp->result == REDISMODULE_ERR) {
+            RAI_SafeAddDataPoint(rstats,0,1,1,0);
+            RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
+            dag_error = 1;
+          } else {
+            RAI_SafeAddDataPoint(rstats,currentOp->duration_us,1,0,0);
+            RedisModule_ReplyWithSimpleString(ctx, "OK");
+          }
+          break;
         }
 
       default:

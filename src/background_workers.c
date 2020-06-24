@@ -120,10 +120,12 @@ void *RedisAI_Run_ThreadMain(void *arg) {
 
       queueItem *item = queueFront(run_queue_info->run_queue);
 
-      // TODO DAG
+      // TODO DAG BATCHING
       // If a batch item is a DAG and relies on unrealized outputs, just skip it
       // and give way to other items, as long as the client is different (to
       // avoid breaking the temporal sequence).
+
+      printf("WORKER CYCLE %s\n", run_queue_info->devicestr);
       
       while (item) {
         RedisAI_RunInfo *rinfo = (RedisAI_RunInfo *)item->value;
@@ -138,7 +140,9 @@ void *RedisAI_Run_ThreadMain(void *arg) {
         array_append(evicted_items, item);
         array_append(batch_rinfo, rinfo);
 
+        pthread_mutex_lock(&rinfo->dagMutex);
         if (rinfo->sctx) {
+          pthread_mutex_unlock(&rinfo->dagMutex);
           break;
         }
 
@@ -147,10 +151,12 @@ void *RedisAI_Run_ThreadMain(void *arg) {
         // need to handle outputs properly.
         // DAGRUN
         if (rinfo->use_local_context==1){
+          pthread_mutex_unlock(&rinfo->dagMutex);
           break;
         }
 
         size_t batchsize = rinfo->mctx->model->opts.batchsize;
+        pthread_mutex_unlock(&rinfo->dagMutex);
 
         if (batchsize == 0) {
           break;
@@ -167,6 +173,8 @@ void *RedisAI_Run_ThreadMain(void *arg) {
         while (next_item != NULL) {
           RedisAI_RunInfo *next_rinfo = (RedisAI_RunInfo *)next_item->value;
 
+          // TODO DAG
+          // lock both rinfo
           if (RAI_RunInfoBatchable(rinfo, next_rinfo) == 0) {
             next_item = queueNext(next_item);
             continue;
@@ -241,11 +249,16 @@ void *RedisAI_Run_ThreadMain(void *arg) {
       pthread_mutex_lock(&run_queue_info->run_queue_mutex);
 
       // TODO DAG
-      // If job is waiting (no progress, i.e. line offset for the device), then just flip the top of the queue
+      // If job is waiting (no progress, i.e. entry offset for the device), then just flip the top of the queue
 
       for (long long i = 0; i < array_len(evicted_items); i++) {
         RedisAI_RunInfo *evicted_rinfo = (RedisAI_RunInfo *)(evicted_items[i]->value);
-        if (evicted_rinfo->use_local_context == 1 && evicted_rinfo->dagComplete == 0) {
+        pthread_mutex_lock(&evicted_rinfo->dagMutex);
+        const int use_local_context = evicted_rinfo->use_local_context;
+        const int dagComplete = evicted_rinfo->dagComplete;
+        const int dagError = *evicted_rinfo->dagError;
+        pthread_mutex_unlock(&evicted_rinfo->dagMutex);
+        if (use_local_context == 1 && dagComplete == 0 && !dagError) {
           queueUnpop(run_queue_info->run_queue, evicted_rinfo);
         }
         else {

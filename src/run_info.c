@@ -132,6 +132,7 @@ int RAI_InitRunInfo(RedisAI_RunInfo **result) {
   rinfo->dagReplyLength = 0;
   rinfo->dagNumberCommands = 0;
   rinfo->dagMaster = 1;
+  rinfo->dagError = RedisModule_Calloc(1, sizeof(int));
   pthread_mutex_init(&rinfo->dagMutex, NULL);
   *result = rinfo;
   return REDISMODULE_OK;
@@ -161,6 +162,7 @@ int RAI_ShallowCopyDagRunInfo(RedisAI_RunInfo **result, RedisAI_RunInfo *src) {
   rinfo->dagNumberCommands = src->dagNumberCommands;
   rinfo->dagMutex = src->dagMutex;
   rinfo->dagMaster = 0;
+  rinfo->dagError = src->dagError;
   *result = rinfo;
   return REDISMODULE_OK;
 }
@@ -256,6 +258,10 @@ void RAI_FreeRunInfo(RedisModuleCtx *ctx, struct RedisAI_RunInfo *rinfo) {
       RAI_FreeDagOp(ctx, rinfo->dagOps[i]);
     }
     array_free(rinfo->dagOps);
+  }
+
+  if (rinfo->dagError) {
+    RedisModule_Free(rinfo->dagError);
   }
 
   if (rinfo->outkeys) {
