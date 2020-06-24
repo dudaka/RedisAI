@@ -552,11 +552,10 @@ int RAI_ModelSerialize(RAI_Model *model, char **buffer, size_t *len, RAI_Error *
 int RedisAI_Parse_ModelRun_RedisCommand(RedisModuleCtx *ctx,
                                         RedisModuleString **argv, int argc,
                                         RAI_ModelRunCtx **mctx,
+                                        RedisModuleString ***inkeys,
                                         RedisModuleString ***outkeys,
-                                        RAI_Model **mto, int useLocalContext,
-                                        AI_dict **localContextDict, 
-                                        int use_chaining_operator,
-                                        const char *chaining_operator, RAI_Error *error) {
+                                        RAI_Model **mto,
+                                        RAI_Error *error) {
   if (argc < 3) {
     if (ctx == NULL) {
       RAI_SetError(error, RAI_EMODELRUN,
@@ -586,66 +585,63 @@ int RedisAI_Parse_ModelRun_RedisCommand(RedisModuleCtx *ctx,
 
   for (; argpos <= argc - 1; argpos++) {
     const char *arg_string = RedisModule_StringPtrLen(argv[argpos], NULL);
-    if (use_chaining_operator == 1) {
-      if (!strcasecmp(arg_string, chaining_operator)) {
-        break;
-      }
-    }
     if (!strcasecmp(arg_string, "OUTPUTS") && outputs_flag_count == 0) {
       is_input = 1;
       outputs_flag_count = 1;
     } else {
       RedisModule_RetainString(ctx, argv[argpos]);
       if (is_input == 0) {
-        RAI_Tensor *inputTensor;
-        if (useLocalContext == 0) {
-          RedisModuleKey *tensorKey;
-          const int status = RAI_GetTensorFromKeyspace(
-              ctx, argv[argpos], &tensorKey, &inputTensor, REDISMODULE_READ);
-          if (status == REDISMODULE_ERR) {
-            // TODO: free rinfo
-            return -1;
-          }
-          RedisModule_CloseKey(tensorKey);
-        } else {
-          const int get_result = RAI_getTensorFromLocalContext(
-              ctx, *localContextDict, arg_string, &inputTensor,error);
-          if (get_result == REDISMODULE_ERR) {
-            return -1;
-          }
-        }
+        // RAI_Tensor *inputTensor;
+        // if (useLocalContext == 0) {
+        //   RedisModuleKey *tensorKey;
+        //   const int status = RAI_GetTensorFromKeyspace(
+        //       ctx, argv[argpos], &tensorKey, &inputTensor, REDISMODULE_READ);
+        //   if (status == REDISMODULE_ERR) {
+        //     // TODO: free rinfo
+        //     return -1;
+        //   }
+        //   RedisModule_CloseKey(tensorKey);
+        // } else {
+        //   const int get_result = RAI_getTensorFromLocalContext(
+        //       ctx, *localContextDict, arg_string, &inputTensor,error);
+        //   if (get_result == REDISMODULE_ERR) {
+        //     return -1;
+        //   }
+        // }
 
         // Opname here is passed without copying
-        const char *opname = NULL;
-        if ((*mto)->inputs) {
-          opname = (*mto)->inputs[ninputs];
-        }
-        if (!RAI_ModelRunCtxAddInput(*mctx, opname, inputTensor)) {
-          // todo free rinfo
-          if (ctx == NULL) {
-            RAI_SetError(error, RAI_EMODELRUN, "ERR Input key not found");
-          } else {
-            RedisModule_ReplyWithError(ctx, "ERR Input key not found");
-          }
-          return -1;
-        }
+        // const char *opname = NULL;
+        // if ((*mto)->inputs) {
+        //   opname = (*mto)->inputs[ninputs];
+        // }
+        // if (!RAI_ModelRunCtxAddInput(*mctx, opname, inputTensor)) {
+        //   // todo free rinfo
+        //   if (ctx == NULL) {
+        //     RAI_SetError(error, RAI_EMODELRUN, "ERR Input key not found");
+        //   } else {
+        //     RedisModule_ReplyWithError(ctx, "ERR Input key not found");
+        //   }
+        //   return -1;
+        // }
+
+        *inkeys = array_append(*inkeys, argv[argpos]);
         ninputs++;
       } else {
         // Opname here is passed without copying
-        const char *opname = NULL;
-        if ((*mto)->outputs) {
-          opname = (*mto)->outputs[noutputs];
-        }
-        if (!RAI_ModelRunCtxAddOutput(*mctx, opname)) {
-          // todo free rinfo
-          if (ctx == NULL) {
-            RAI_SetError(error, RAI_EMODELRUN, "ERR Output key not found");
-          } else {
-            RedisModule_ReplyWithError(ctx, "ERR Output key not found");
-          }
-          return -1;
-        }
-        *outkeys=array_append(*outkeys,argv[argpos]);
+        // const char *opname = NULL;
+        // if ((*mto)->outputs) {
+        //   opname = (*mto)->outputs[noutputs];
+        // }
+        // if (!RAI_ModelRunCtxAddOutput(*mctx, opname)) {
+        //   // todo free rinfo
+        //   if (ctx == NULL) {
+        //     RAI_SetError(error, RAI_EMODELRUN, "ERR Output key not found");
+        //   } else {
+        //     RedisModule_ReplyWithError(ctx, "ERR Output key not found");
+        //   }
+        //   return -1;
+        // }
+        *outkeys = array_append(*outkeys, argv[argpos]);
         // (*outkeys)[noutputs] = argv[argpos];
         noutputs++;
       }

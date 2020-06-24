@@ -34,6 +34,7 @@ enum RedisAI_DAGMode {
 typedef struct RAI_DagOp {
   int commandType;
   RedisModuleString *runkey;
+  RedisModuleString **inkeys;
   RedisModuleString **outkeys;
   RAI_Tensor **outTensors;
   RAI_ModelRunCtx *mctx;

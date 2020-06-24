@@ -24,8 +24,6 @@
  * @param rinfo context in which RedisAI blocking commands operate.
  * @return
  */
-void *RedisAI_DagRunSession(RedisAI_RunInfo *rinfo);
-
 void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char* devicestr, int *progress);
 
 /**

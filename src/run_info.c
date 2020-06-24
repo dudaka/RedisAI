@@ -64,6 +64,10 @@ int RAI_InitDagOp(RAI_DagOp **result) {
   }
   dagOp->commandType = REDISAI_DAG_CMD_NONE;
   dagOp->runkey = NULL;
+  dagOp->inkeys = (RedisModuleString **)array_new(RedisModuleString *, 1);
+  if (!(dagOp->inkeys)) {
+    return REDISMODULE_ERR;
+  }
   dagOp->outkeys = (RedisModuleString **)array_new(RedisModuleString *, 1);
   if (!(dagOp->outkeys)) {
     return REDISMODULE_ERR;
@@ -176,6 +180,7 @@ void RAI_FreeDagOp(RedisModuleCtx *ctx, RAI_DagOp *dagOp) {
       }
       array_free(dagOp->argv);
     }
+    // dagOp->inkeys is released on all argv release above
     // dagOp->outkeys is released on all argv release above
     // dagOp->outTensors is released on RunInfo after checking what tensors to
     // persist

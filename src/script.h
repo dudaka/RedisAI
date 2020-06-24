@@ -179,13 +179,6 @@ int RAI_GetScriptFromKeyspace(RedisModuleCtx* ctx, RedisModuleString* keyName,
  * @param sctx Destination Script context to store the parsed data
  * @param outkeys array to store the parsed output keys
  * @param sto script to run the session from
- * @param useLocalContext flag to enable using local context
- * @param localContextDict local non-blocking hash table containing DAG's
- * keynames marked as persistent
- * @param use_chaining_operator flag to enable enforcing the chaining operator
- * checking
- * @param chaining_operator operator used to split operations. Any command
- * argument after the chaining operator is not considered
  * @param error error data structure to store error message in the case of
  * parsing failures
  * @return processed number of arguments on success, or -1 if the parsing failed
@@ -193,11 +186,10 @@ int RAI_GetScriptFromKeyspace(RedisModuleCtx* ctx, RedisModuleString* keyName,
 int RedisAI_Parse_ScriptRun_RedisCommand(RedisModuleCtx *ctx,
                                          RedisModuleString **argv, int argc,
                                          RAI_ScriptRunCtx **sctx,
+                                         RedisModuleString ***inkeys,
                                          RedisModuleString ***outkeys,
-                                         struct RAI_Script **sto, int useLocalContext,
-                                         AI_dict **localContextDict,
-                                         int use_chaining_operator,
-                                         const char *chaining_operator, RAI_Error *error);
+                                         struct RAI_Script **sto,
+                                         RAI_Error *error);
 
 
 /**

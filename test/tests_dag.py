@@ -822,14 +822,14 @@ def test_dagrun_modelrun_multidevice_resnet2(env):
                               'BLOB', model_pb)
     env.assertEqual(ret, b'OK')
 
-    # ret = con.execute_command('AI.MODELSET', model_name_1, 'TF', device_1,
-    #                           'INPUTS', inputvar,
-    #                           'OUTPUTS', outputvar,
-    #                           'BLOB', model_pb)
-    # env.assertEqual(ret, b'OK')
+    ret = con.execute_command('AI.MODELSET', model_name_1, 'TF', device_1,
+                              'INPUTS', inputvar,
+                              'OUTPUTS', outputvar,
+                              'BLOB', model_pb)
+    env.assertEqual(ret, b'OK')
 
-    # ret = con.execute_command('AI.SCRIPTSET', script_name, DEVICE, 'SOURCE', script)
-    ret = con.execute_command('AI.SCRIPTSET', script_name, device_0, 'SOURCE', script)
+    ret = con.execute_command('AI.SCRIPTSET', script_name, DEVICE, 'SOURCE', script)
+    # ret = con.execute_command('AI.SCRIPTSET', script_name, device_0, 'SOURCE', script)
     env.assertEqual(ret, b'OK')
  
     image_key = 'image'
@@ -848,24 +848,24 @@ def test_dagrun_modelrun_multidevice_resnet2(env):
         'AI.SCRIPTRUN',  script_name, 'pre_process_3ch',
                      'INPUTS', image_key,
                      'OUTPUTS', temp_key1,
-        #              '|>',
-        # 'AI.MODELRUN', model_name_0,
-        #              'INPUTS', temp_key1,
-        #              'OUTPUTS', temp_key2_0,
-        #             '|>',
-        # 'AI.MODELRUN', model_name_1,
-        #              'INPUTS', temp_key1,
-        #              'OUTPUTS', temp_key2_1,
+                     '|>',
+        'AI.MODELRUN', model_name_0,
+                     'INPUTS', temp_key1,
+                     'OUTPUTS', temp_key2_0,
+                    '|>',
+        'AI.MODELRUN', model_name_1,
+                     'INPUTS', temp_key1,
+                     'OUTPUTS', temp_key2_1,
         #               '|>',
         # 'AI.SCRIPTRUN', script_name, 'post_process',
         #               'INPUTS', temp_key2_0,
-        #               'OUTPUTS', class_key_0, '|>',
+        #               'OUTPUTS', class_key_0,
+        #               '|>',
         # 'AI.SCRIPTRUN', script_name, 'post_process',
         #               'INPUTS', temp_key2_1,
         #               'OUTPUTS', class_key_1
     )
-    # env.assertEqual([b'OK', b'OK', b'OK', b'OK', b'OK', b'OK'], ret)
-    env.assertEqual([b'OK', b'OK', b'OK', b'OK'], ret)
+    env.assertEqual([b'OK', b'OK', b'OK', b'OK', b'OK', b'OK'], ret)
 
     # ret = con.execute_command('AI.TENSORGET', temp_key2_0, 'VALUES' )
     # env.assertEqual(ret, True)
