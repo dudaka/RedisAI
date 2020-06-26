@@ -107,7 +107,7 @@ void *RedisAI_Run_ThreadMain(void *arg) {
   RAI_PTHREAD_SETNAME("redisai_bthread");
   pthread_mutex_lock(&run_queue_info->run_queue_mutex);
   while (true) {
-    // printf("PRE-WAIT WORKER %s\n", run_queue_info->devicestr);
+    printf("PRE-WAIT WORKER %s\n", run_queue_info->devicestr);
     int rc = pthread_cond_wait(&run_queue_info->queue_condition_var,
                                &run_queue_info->run_queue_mutex);
 

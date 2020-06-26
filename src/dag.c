@@ -128,7 +128,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   // we must make sure we are not creating race conditions on currrentOp; 
   // the only variable we access above is `result`. We need to acquire
   // a lock in order to set result (FIXME)
-  printf("%d %s\n", currentOp->commandType, devicestr);
+  // printf("%d %s\n", currentOp->commandType, devicestr);
 
   switch (currentOp->commandType) {
     case REDISAI_DAG_CMD_TENSORSET: {
@@ -652,7 +652,6 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
       }
       if (!strcasecmp(arg_string, "AI.MODELRUN")) {
         if (argc - 2 < argpos) {
-          printf("MODELRUN WRONG ARITY\n");
           return RedisModule_WrongArity(ctx);
         }
         RAI_DagOp *currentOp = rinfo->dagOps[rinfo->dagNumberCommands];
@@ -693,7 +692,6 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
       }
       if (!strcasecmp(arg_string, "AI.SCRIPTRUN")) {
         if (argc - 3 < argpos) {
-          printf("SCRIPTRUN WRONG ARITY\n");
           return RedisModule_WrongArity(ctx);
         }
         RAI_DagOp *currentOp = rinfo->dagOps[rinfo->dagNumberCommands];
@@ -742,36 +740,23 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
 
   for (long long i=0; i<array_len(rinfo->dagOps); i++) {
     RAI_DagOp *currentOp = rinfo->dagOps[i];
-    printf("ARGC %d %d\n", currentOp->commandType, currentOp->argc);
     int parse_result;
     switch (currentOp->commandType) {
       case REDISAI_DAG_CMD_MODELRUN:
-        printf("MODELRUN ARGS: ");
-        for (int i=0; i<currentOp->argc; i++) {
-          printf("%s ", RedisModule_StringPtrLen(currentOp->argv[i], NULL));
-        }
-        printf("\n");
         parse_result = RedisAI_Parse_ModelRun_RedisCommand(
             NULL, currentOp->argv, currentOp->argc, &(currentOp->mctx),
             &(currentOp->inkeys), &(currentOp->outkeys),
             &(currentOp->mctx->model), currentOp->err);
         if (parse_result < 0) {
-          printf("MODELRUN PARSING ERROR %s\n", currentOp->err->detail_oneline);
           return REDISMODULE_ERR;
         }
         break;
       case REDISAI_DAG_CMD_SCRIPTRUN:
-        printf("SCRIPTRUN ARGS: ");
-        for (int i=0; i<currentOp->argc; i++) {
-          printf("%s ", RedisModule_StringPtrLen(currentOp->argv[i], NULL));
-        }
-        printf("\n");
         parse_result = RedisAI_Parse_ScriptRun_RedisCommand(
                 NULL, currentOp->argv, currentOp->argc, &(currentOp->sctx),
                 &(currentOp->inkeys), &(currentOp->outkeys),
                 &(currentOp->sctx->script), currentOp->err);
         if (parse_result < 0) {
-          printf("SCRIPTRUN PARSING ERROR %s\n", currentOp->err->detail_oneline);
           return REDISMODULE_ERR;
         }
         break;
