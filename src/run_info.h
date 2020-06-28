@@ -87,7 +87,6 @@ typedef struct RedisAI_RunInfo {
   RAI_DagOp **dagOps;
   int dagReplyLength;
   int dagNumberCommands;
-  int dagComplete;
   int *dagError;
   pthread_mutex_t dagMutex;
   int dagMaster;

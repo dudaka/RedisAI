@@ -25,13 +25,18 @@
 #include "util/queue.h"
 
 
-void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, int *progress) {
+void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, int *progress, int *complete) {
   RAI_DagOp *currentOp = NULL;
 
-  if (rinfo->dagComplete) {
-    *progress = 0;
-    return NULL;
-  }
+  // printf("A\n");
+
+  // if (rinfo->dagComplete) {
+  //   *progress = 0;
+  //   *complete = 1;
+  //   return NULL;
+  // }
+
+  // printf("B\n");
 
   // DONE DAG
   // acquire mutex
@@ -42,13 +47,24 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   bool last_op = false;
   pthread_mutex_lock(&rinfo->dagMutex);
   for (size_t i = 0; i < array_len(rinfo->dagOps); i++) {
+
+    // printf("B1\n");
+    // printf("B1 %p %s\n", rinfo, devicestr);
+    // printf("B1 %p %s\n", rinfo->dagOps, devicestr);
+    // printf("B1 %p %s\n", rinfo->dagOps[i], devicestr);
+    // printf("B1 %d %s\n", rinfo->dagOps[i]->result, devicestr);
+
     if (rinfo->dagOps[i]->result >= 0) {
       continue;
     }
 
+    // printf("B2\n");
+
     if (strcasecmp(devicestr, rinfo->dagOps[i]->devicestr) != 0) {
       continue;
     }
+
+    // printf("B3\n");
 
     // if (rinfo->dagOps[i]->)
 
@@ -77,38 +93,50 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       // are running other prior computations
       // in this case we shouldn't unblock
 
+      // printf("B4\n");
+
       // TODO DAG FIX
       // Worker can be done even if not last op (if no other ops)
       // Think about this
       if (i == array_len(rinfo->dagOps) - 1) {
         last_op = true;
       }
+      // printf("B5\n");
       break;
     }
   }
   pthread_mutex_unlock(&rinfo->dagMutex);
+  
+  // printf("C\n");
 
   // TODO DAG
   // If results are unrealized so that computation cannot proceed, 
   // then return making sure progress is set to 0
 
   // if (currentOp == NULL && all_complete == 0) {
-  if (currentOp == NULL) {
-    *progress = 0;
-    return NULL;
-  }
+  // if (currentOp == NULL) {
+  //   printf("NULL Op %s\n", devicestr);
+  //   *progress = 0;
+  //   printf("PROGRESS %p\n", progress);
+  //   printf("PROGRESS %d\n", *progress);
+  //   return NULL;
+  // }
+
+  // printf("D\n");
 
   // TODO DAG
   // Decide whether to keep this here (it requires one extra round)
   // or keep it here just to be safe
 
-  if (currentOp == NULL && all_complete == 1 &&
-      rinfo->dagMaster && rinfo->client != NULL) {
-    *progress = 0;
-    rinfo->dagComplete = 1;
-    RedisModule_UnblockClient(rinfo->client, rinfo);
+  if (currentOp == NULL && all_complete) {
+    *complete = 1;
+    if (rinfo->dagMaster && rinfo->client != NULL) {
+      RedisModule_UnblockClient(rinfo->client, rinfo);
+    }
     return NULL;
   }
+
+  // printf("E\n");
 
   // If all complete (ie currentOp == NULL) and all results are realized
   // then unblock.
@@ -129,6 +157,8 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
   // the only variable we access above is `result`. We need to acquire
   // a lock in order to set result (FIXME)
   // printf("%d %s\n", currentOp->commandType, devicestr);
+
+  // printf("F\n");
 
   switch (currentOp->commandType) {
     case REDISAI_DAG_CMD_TENSORSET: {
@@ -154,6 +184,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
           RedisModule_StringPtrLen(currentOp->argv[1], NULL);
       RAI_Tensor *t = NULL;
       pthread_mutex_lock(&rinfo->dagMutex);
+      printf("TENSORGET\n");
       currentOp->result = RAI_getTensorFromLocalContext(
           NULL, rinfo->dagTensorsContext, key_string, &t, currentOp->err);
       pthread_mutex_unlock(&rinfo->dagMutex);
@@ -179,6 +210,7 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       RAI_Tensor* inputTensors[array_len(currentOp->inkeys)];
       for (int i=0; i<array_len(currentOp->inkeys); i++) {
         RAI_Tensor *inputTensor;
+        // printf("MODELRUN\n");
         const int get_result = RAI_getTensorFromLocalContext(
             NULL, rinfo->dagTensorsContext, RedisModule_StringPtrLen(currentOp->inkeys[i], NULL), &inputTensor, &error);
         if (get_result == REDISMODULE_ERR) {
@@ -248,6 +280,10 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
       RAI_Tensor* inputTensors[array_len(currentOp->inkeys)];
       for (int i=0; i<array_len(currentOp->inkeys); i++) {
         RAI_Tensor *inputTensor;
+        // printf("SCRIPTRUN\n");
+        if (currentOp->inkeys[i] == NULL) {
+          printf("NULL KEY\n");
+        }
         const int get_result = RAI_getTensorFromLocalContext(
             NULL, rinfo->dagTensorsContext, RedisModule_StringPtrLen(currentOp->inkeys[i], NULL), &inputTensor, &error);
         if (get_result == REDISMODULE_ERR) {
@@ -306,6 +342,8 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
     }
   }
 
+  // printf("G\n");
+
   if (currentOp->result == REDISMODULE_OK) {
     *progress = 1;
   }
@@ -319,13 +357,20 @@ void *RedisAI_DagRunSessionStep(RedisAI_RunInfo *rinfo, const char *devicestr, i
     return NULL;
   }
 
-  if (last_op) {
-    rinfo->dagComplete = 1;
-  }
+  // printf("H\n");
+
+  // if (last_op) {
+  //   *complete = 1;
+  //   // rinfo->dagComplete = 1;
+  // }
+
+  // printf("I\n");
 
   if (last_op && rinfo->dagMaster && rinfo->client != NULL) {
     RedisModule_UnblockClient(rinfo->client, rinfo);
   }
+
+  // printf("L\n");
 
   return NULL;
 }
