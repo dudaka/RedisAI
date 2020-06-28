@@ -94,7 +94,6 @@ int ensureRunQueue(const char *devicestr, RunQueueInfo **run_queue_info) {
     AI_dictAdd(run_queues, (void *)devicestr_, (void *)*run_queue_info);
     result = REDISMODULE_OK;
   }
-  // printf("ENSURING QUEUE %s\n", devicestr_);
 
   RedisModule_Free(devicestr_);
 
@@ -107,16 +106,12 @@ void *RedisAI_Run_ThreadMain(void *arg) {
   RAI_PTHREAD_SETNAME("redisai_bthread");
   pthread_mutex_lock(&run_queue_info->run_queue_mutex);
   while (true) {
-    // printf("PRE-WAIT WORKER %s\n", run_queue_info->devicestr);
     int rc = pthread_cond_wait(&run_queue_info->queue_condition_var,
                                &run_queue_info->run_queue_mutex);
-
-    // printf("WORKER %s\n", run_queue_info->devicestr);
 
     long long run_queue_len = queueLength(run_queue_info->run_queue);
 
     while (run_queue_len > 0) {
-      // printf("IN WHILE\n");
       queueItem **evicted_items = NULL;
       RedisAI_RunInfo **batch_rinfo = NULL;
 
@@ -127,8 +122,6 @@ void *RedisAI_Run_ThreadMain(void *arg) {
       // and give way to other items, as long as the client is different (to
       // avoid breaking the temporal sequence).
 
-      // printf("WORKER CYCLE %s\n", run_queue_info->devicestr);
-      
       while (item) {
         RedisAI_RunInfo *rinfo = (RedisAI_RunInfo *)item->value;
 
@@ -230,7 +223,6 @@ void *RedisAI_Run_ThreadMain(void *arg) {
       // We need to equip each Dag run info with a mutex and allocate different
       // run infos sharing the underlying data structures.
       
-      // printf("PRE RUN SESSION\n");
       int dag_progress = 0;
       int dag_complete = 0;
       if (array_len(batch_rinfo) > 0) {
@@ -238,13 +230,10 @@ void *RedisAI_Run_ThreadMain(void *arg) {
           // DONE DAG
           // Report if there was progress or not
           RedisAI_DagRunSessionStep(batch_rinfo[0], run_queue_info->devicestr, &dag_progress, &dag_complete);
-          // printf("PROGRESS %d %s\n", dag_progress, run_queue_info->devicestr);
         } else {
           RAI_ModelRunScriptRunSession(batch_rinfo);
         }
       }
-
-      // printf("A\n");
 
       array_free(batch_rinfo);
 
@@ -252,7 +241,6 @@ void *RedisAI_Run_ThreadMain(void *arg) {
 
       // DONE DAG
       // If job is waiting (no progress, i.e. entry offset for the device), then just flip the top of the queue
-      // printf("B\n");
 
       for (long long i = 0; i < array_len(evicted_items); i++) {
         RedisAI_RunInfo *evicted_rinfo = (RedisAI_RunInfo *)(evicted_items[i]->value);
@@ -280,11 +268,9 @@ void *RedisAI_Run_ThreadMain(void *arg) {
           RedisModule_Free(evicted_items[i]);
         }
       }
-      // printf("C\n");
       array_free(evicted_items);
 
       run_queue_len = queueLength(run_queue_info->run_queue);
-      // printf("D\n");
     }
   }
 }
