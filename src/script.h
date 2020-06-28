@@ -192,6 +192,7 @@ int RedisAI_Parse_ScriptRun_RedisCommand(RedisModuleCtx *ctx,
                                          RAI_Error *error);
 
 
+#if 0
 /**
  * Helper method to reply if the ctx is not NULL or fallback and set the error in the RAI_Error structure
  * @param ctx Context in which Redis modules operate
@@ -200,6 +201,7 @@ int RedisAI_Parse_ScriptRun_RedisCommand(RedisModuleCtx *ctx,
  * @param errorMessage the error detail
  */
 void RedisAI_ReplyOrSetError(RedisModuleCtx *ctx, RAI_Error *error, RAI_ErrorCode code, const char* errorMessage );
+#endif
 
 /**
  * @brief  Returns the redis module type representing a script.

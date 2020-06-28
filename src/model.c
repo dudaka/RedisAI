@@ -557,22 +557,14 @@ int RedisAI_Parse_ModelRun_RedisCommand(RedisModuleCtx *ctx,
                                         RAI_Model **mto,
                                         RAI_Error *error) {
   if (argc < 3) {
-    if (ctx == NULL) {
-      RAI_SetError(error, RAI_EMODELRUN,
-                   "ERR wrong number of arguments for 'AI.MODELRUN' command");
-    } else {
-      RedisModule_WrongArity(ctx);
-    }
+    RAI_SetError(error, RAI_EMODELRUN,
+                 "ERR wrong number of arguments for 'AI.MODELRUN' command");
     return -1;
   }
 
   const char *inputstr = RedisModule_StringPtrLen(argv[2], NULL);
   if (strcasecmp(inputstr, "INPUTS")) {
-    if (ctx == NULL) {
-      RAI_SetError(error, RAI_EMODELRUN, "ERR INPUTS not specified");
-    } else {
-      RedisModule_ReplyWithError(ctx, "ERR INPUTS not specified");
-    }
+    RAI_SetError(error, RAI_EMODELRUN, "ERR INPUTS not specified");
     return -1;
   }
 
@@ -649,32 +641,18 @@ int RedisAI_Parse_ModelRun_RedisCommand(RedisModuleCtx *ctx,
   }
 
   if ((*mto)->inputs && array_len((*mto)->inputs) != ninputs) {
-    if (ctx == NULL) {
-      RAI_SetError(
-          error, RAI_EMODELRUN,
-          "Number of names given as INPUTS during MODELSET and keys given as "
-          "INPUTS here do not match");
-    } else {
-      RedisModule_ReplyWithError(
-          ctx,
-          "Number of names given as INPUTS during MODELSET and keys given as "
-          "INPUTS here do not match");
-    }
+    RAI_SetError(
+        error, RAI_EMODELRUN,
+        "Number of names given as INPUTS during MODELSET and keys given as "
+        "INPUTS here do not match");
     return -1;
   }
 
   if ((*mto)->outputs && array_len((*mto)->outputs) != noutputs) {
-    if (ctx == NULL) {
-      RAI_SetError(
-          error, RAI_EMODELRUN,
-          "Number of names given as OUTPUTS during MODELSET and keys given as "
-          "INPUTS here do not match");
-    } else {
-      RedisModule_ReplyWithError(
-          ctx,
-          "Number of names given as OUTPUTS during MODELSET and keys given as "
-          "INPUTS here do not match");
-    }
+    RAI_SetError(
+        error, RAI_EMODELRUN,
+        "Number of names given as OUTPUTS during MODELSET and keys given as "
+        "INPUTS here do not match");
     return -1;
   }
   return argpos;

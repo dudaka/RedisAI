@@ -555,14 +555,13 @@ int RedisAI_ModelRun_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv,
 
   RedisModuleString** inkeys = (RedisModuleString **)array_new(RedisModuleString *, 1);
 
+  RAI_Error err = {0};
   const int parse_result = RedisAI_Parse_ModelRun_RedisCommand(ctx, argv,
-                                   argc, &(rinfo->mctx), &inkeys, &(rinfo->outkeys), &mto, NULL);
+                                   argc, &(rinfo->mctx), &inkeys, &(rinfo->outkeys), &mto, &err);
   RedisModule_CloseKey(modelKey);
 
-  // TODO DAG: this is not the way it should be: the error needs to be given as last arg to ModelRun and the error reported
-  // if the number of parsed args is negative something went wrong
   if (parse_result < 0) {
-    return REDISMODULE_ERR;
+    return RedisModule_ReplyWithError(ctx, err.detail_oneline);
   }
 
   for (int i=0; i<array_len(inkeys); i++) {
@@ -571,7 +570,7 @@ int RedisAI_ModelRun_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv,
     const int status = RAI_GetTensorFromKeyspace(ctx, inkeys[i], &tensorKey, &inputTensor, REDISMODULE_READ);
     if (status == REDISMODULE_ERR) {
       // TODO: free rinfo
-      // TODO: output proper error
+      // TODO DAG: output proper error
       return REDISMODULE_ERR;
     }
     RedisModule_CloseKey(tensorKey);
@@ -644,14 +643,14 @@ int RedisAI_ScriptRun_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv
 
   RedisModuleString** inkeys = (RedisModuleString **)array_new(RedisModuleString *, 1);
 
+  RAI_Error err = {0};
   const int parse_result = RedisAI_Parse_ScriptRun_RedisCommand(
-      ctx, argv, argc, &(rinfo->sctx), &inkeys, &(rinfo->outkeys), &sto, NULL);
+      ctx, argv, argc, &(rinfo->sctx), &inkeys, &(rinfo->outkeys), &sto, &err);
   RedisModule_CloseKey(key);
 
-  // TODO DAG: this is not the way it should be: the error needs to be given as last arg to ModelRun and the error reported
   // if the number of parsed args is negative something went wrong
   if (parse_result < 0) {
-    return REDISMODULE_ERR;
+    return RedisModule_ReplyWithError(ctx, err.detail_oneline);
   }
 
         // RAI_Tensor *inputTensor;
@@ -673,11 +672,10 @@ int RedisAI_ScriptRun_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv
         // }
         // if (!RAI_ScriptRunCtxAddInput(*sctx, inputTensor, error)) return -1;
 
-  RAI_Error err = {0};
- 
   for (int i=0; i<array_len(inkeys); i++) {
     RAI_Tensor *inputTensor;
     RedisModuleKey *tensorKey;
+
     const int status = RAI_GetTensorFromKeyspace(ctx, inkeys[i], &tensorKey, &inputTensor, REDISMODULE_READ);
     if (status == REDISMODULE_ERR) {
       // TODO: free rinfo
@@ -688,14 +686,14 @@ int RedisAI_ScriptRun_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv
 
     if (!RAI_ScriptRunCtxAddInput(rinfo->sctx, inputTensor, &err)) {
       // todo free rinfo
-      return RedisModule_ReplyWithError(ctx, "ERR Input key not found");
+      return RedisModule_ReplyWithError(ctx, err.detail_oneline);
     }
   }
 
   for (int i=0; i<array_len(rinfo->outkeys); i++) {
     if (!RAI_ScriptRunCtxAddOutput(rinfo->sctx)) {
       // todo free rinfo
-      return RedisModule_ReplyWithError(ctx, "ERR Output key not found");
+      return RedisModule_ReplyWithError(ctx, err.detail_oneline);
     }
   }
 

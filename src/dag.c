@@ -748,7 +748,7 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
             &(currentOp->inkeys), &(currentOp->outkeys),
             &(currentOp->mctx->model), currentOp->err);
         if (parse_result < 0) {
-          return REDISMODULE_ERR;
+          return RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
         }
         break;
       case REDISAI_DAG_CMD_SCRIPTRUN:
@@ -757,7 +757,7 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
                 &(currentOp->inkeys), &(currentOp->outkeys),
                 &(currentOp->sctx->script), currentOp->err);
         if (parse_result < 0) {
-          return REDISMODULE_ERR;
+          return RedisModule_ReplyWithError(ctx, currentOp->err->detail_oneline);
         }
         break;
     }
@@ -826,8 +826,6 @@ int RedisAI_DagRunSyntaxParser(RedisModuleCtx *ctx, RedisModuleString **argv,
       curr_rinfo = rinfo_copies[copy_count];
       copy_count += 1;
     }
-
-    printf("PRE PUSH\n");
 
     pthread_mutex_lock(&run_queue_info->run_queue_mutex);
     queuePush(run_queue_info->run_queue, curr_rinfo);

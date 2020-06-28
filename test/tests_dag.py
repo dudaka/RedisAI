@@ -66,7 +66,7 @@ def test_dag_common_errors(env):
     except Exception as e:
         exception = e
         env.assertEqual(type(exception), redis.exceptions.ResponseError)
-        env.assertEqual("ERR unsupported command within DAG",exception.__str__())
+        env.assertEqual("unsupported command within DAG",exception.__str__())
 
     # ERR wrong number of arguments for 'AI.DAGRUN' command
     try:
@@ -113,7 +113,7 @@ def test_dagro_common_errors(env):
     except Exception as e:
         exception = e
         env.assertEqual(type(exception), redis.exceptions.ResponseError)
-        env.assertEqual("ERR unsupported command within DAG",exception.__str__())
+        env.assertEqual("unsupported command within DAG",exception.__str__())
 
     # ERR wrong number of arguments for 'AI.DAGRUN' command
     try:
@@ -163,7 +163,7 @@ def test_dagrun_ro_modelrun_scriptrun_resnet(env):
         class_key = 'output'
 
         ret = con.execute_command(
-            'AI.DAGRUN_RO', '|>',
+            'AI.DAGRUN_RO',
             'AI.TENSORSET', image_key,
             'UINT8', img.shape[1], img.shape[0], 3,
             'BLOB', img.tobytes(), '|>',
@@ -246,7 +246,6 @@ def test_dag_scriptrun_errors(env):
     ret = con.execute_command('AI.SCRIPTSET', script_name, DEVICE, 'SOURCE', script)
     env.assertEqual(ret, b'OK')
 
-
     # ERR wrong number of inputs
     try:
         image_key = 'image'
@@ -270,7 +269,7 @@ def test_dag_scriptrun_errors(env):
     except Exception as e:
         exception = e
         env.assertEqual(type(exception), redis.exceptions.ResponseError)
-        env.assertEqual("ERR unsupported command within DAG",exception.__str__())
+        env.assertEqual("INPUTS not specified",exception.__str__())
 
 
 def test_dag_modelrun_financialNet_errors(env):
@@ -284,28 +283,28 @@ def test_dag_modelrun_financialNet_errors(env):
                               'INPUTS', 'transaction', 'reference', 'OUTPUTS', 'output', 'BLOB', model_pb)
     env.assertEqual(ret, b'OK')
 
-    tensor_number=1
-    ret = con.execute_command(  'AI.TENSORSET', 'referenceTensor:{0}'.format(tensor_number),
-                                  'FLOAT', 1, 256,
-                                  'BLOB', creditcard_referencedata[0].tobytes())
+    tensor_number = 1
+    ret = con.execute_command('AI.TENSORSET', 'referenceTensor:{0}'.format(tensor_number),
+                                'FLOAT', 1, 256,
+                                'BLOB', creditcard_referencedata[0].tobytes())
     env.assertEqual(ret, b'OK')
 
     # ERR wrong number of inputs
     try:
-        tensor_number=1
+        tensor_number = 1
         ret = con.execute_command(
-        'AI.DAGRUN', 'LOAD', '1', 'referenceTensor:{}'.format(tensor_number), 
-                        'PERSIST', '1', 'classificationTensor:{}'.format(tensor_number), '|>',
-        'AI.TENSORSET', 'transactionTensor:{}'.format(tensor_number), 'FLOAT', 1, 30, '|>',
-        'AI.MODELRUN', 'financialNet', 
-                        'INPUTS', 'transactionTensor:{}'.format(tensor_number),
-                        'OUTPUTS', 'classificationTensor:{}'.format(tensor_number), '|>',
-        'AI.TENSORGET', 'classificationTensor:{}'.format(tensor_number), 'META',
+          'AI.DAGRUN', 'LOAD', '1', 'referenceTensor:{}'.format(tensor_number), 
+                       'PERSIST', '1', 'classificationTensor:{}'.format(tensor_number), '|>',
+          'AI.TENSORSET', 'transactionTensor:{}'.format(tensor_number), 'FLOAT', 1, 30, '|>',
+          'AI.MODELRUN', 'financialNet', 
+                          'INPUTS', 'transactionTensor:{}'.format(tensor_number),
+                          'OUTPUTS', 'classificationTensor:{}'.format(tensor_number), '|>',
+          'AI.TENSORGET', 'classificationTensor:{}'.format(tensor_number), 'META',
     )
     except Exception as e:
         exception = e
         env.assertEqual(type(exception), redis.exceptions.ResponseError)
-        env.assertEqual("ERR unsupported command within DAG",exception.__str__())
+        env.assertEqual("Number of names given as INPUTS during MODELSET and keys given as INPUTS here do not match",exception.__str__())
 
 
 def test_dag_local_tensorset(env):

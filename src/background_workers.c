@@ -94,7 +94,7 @@ int ensureRunQueue(const char *devicestr, RunQueueInfo **run_queue_info) {
     AI_dictAdd(run_queues, (void *)devicestr_, (void *)*run_queue_info);
     result = REDISMODULE_OK;
   }
-  printf("ENSURING QUEUE %s\n", devicestr_);
+  // printf("ENSURING QUEUE %s\n", devicestr_);
 
   RedisModule_Free(devicestr_);
 
@@ -107,7 +107,7 @@ void *RedisAI_Run_ThreadMain(void *arg) {
   RAI_PTHREAD_SETNAME("redisai_bthread");
   pthread_mutex_lock(&run_queue_info->run_queue_mutex);
   while (true) {
-    printf("PRE-WAIT WORKER %s\n", run_queue_info->devicestr);
+    // printf("PRE-WAIT WORKER %s\n", run_queue_info->devicestr);
     int rc = pthread_cond_wait(&run_queue_info->queue_condition_var,
                                &run_queue_info->run_queue_mutex);
 
@@ -229,6 +229,7 @@ void *RedisAI_Run_ThreadMain(void *arg) {
       // We need to equip each Dag run info with a mutex and allocate different
       // run infos sharing the underlying data structures.
       
+      // printf("PRE RUN SESSION\n");
       int dag_progress = 0;
       if (array_len(batch_rinfo) > 0) {
         if (batch_rinfo[0]->use_local_context == 1) {
@@ -272,7 +273,7 @@ void *RedisAI_Run_ThreadMain(void *arg) {
           }
         }
         else {
-          RedisModule_Free(evicted_items[i]);
+          // RedisModule_Free(evicted_items[i]);
         }
       }
       array_free(evicted_items);
